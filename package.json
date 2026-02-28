@@ -1,8 +1,8 @@
 {
   "name": "infs3201_winter2026-a3",
   "version": "1.0.0",
-  "description": "",
   "license": "ISC",
+  "description": "",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
