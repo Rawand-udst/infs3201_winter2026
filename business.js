@@ -1,127 +1,94 @@
-const persistence = require('./persistence.js')
+import { getEmployeeByEmployeeId, getAssignmentsForEmployee, getShiftByShiftId } from "./persistence.js";
 
 /**
- * Return a list of all employees loaded from the storage.
- * @returns {Array<{ employeeId: string, name: string, phone: string }>} List of employees
+ * Convert "HH:MM" to minutes.
+ * @param {string} hhmm
+ * @returns {number}
  */
-async function getAllEmployees() {
-    return await persistence.getAllEmployees()
-}
-
-
-/**
- * Get a list of shiftIDs for an employee.
- * @param {string} empId 
- * @returns {Array<{string}>}
- */
-async function getEmployeeShifts(empId) {
-    return await persistence.getEmployeeShifts(empId)
-}
-
-
-/**
- * Add a new employee record to the system. The empId is automatically generated based
- * on the next available ID number from what is already in the file.
- * @param {{name:string, phone:string}} emp 
- */
-async function addEmployeeRecord(emp) {
-    return await persistence.addEmployeeRecord(emp)
+function timeToMinutes(hhmm) {
+  const parts = (hhmm || "").split(":");
+  const hh = Number(parts[0]);
+  const mm = Number(parts[1]);
+  return hh * 60 + mm;
 }
 
 /**
- * This function attempts to assign a shift to an employee. This function checks to ensure
- * that the employee exists, the shift exists, and that the combination employee/shift has 
- * not already been recorded.
- * 
- * The function currently returns string messages indicating whether the operation was successful
- * or why it failed.  A serious improvement would be to use exceptions; this will be refactored
- * at a later time.
- * 
- * @param {string} empId 
- * @param {string} shiftId 
- * @returns {string} A message indicating the problem of the word "Ok"
+ * Compare shifts by date then startTime.
+ * @param {object} a
+ * @param {object} b
+ * @returns {number}
  */
-async function assignShift(empId, shiftId) {
-    return await persistence.assignShift(empId, shiftId)
+function compareShift(a, b) {
+  if (a.date < b.date) return -1;
+  if (a.date > b.date) return 1;
+
+  const am = timeToMinutes(a.startTime);
+  const bm = timeToMinutes(b.startTime);
+  if (am < bm) return -1;
+  if (am > bm) return 1;
+  return 0;
 }
 
-
 /**
- * This function attempts to assign a shift to an employee. This function checks to ensure
- * that the employee exists, the shift exists, and that the combination employee/shift has 
- * not already been recorded.
- * 
- * The function currently returns string messages indicating whether the operation was successful
- * or why it failed.  A serious improvement would be to use exceptions; this will be refactored
- * at a later time.
- * 
- * NOTE: The referential integrity check here is being done in the business layer because we want to
- * make sure that we don't assign non-existent employees to non-existing shifts.  We are also checking
- * that the same employee is not assigned to the same shift multiple times.  If this check were implemented
- * as well in the persistence it would be okay (i.e. FK and PK constraints).. it *should* still be done
- * here because it is really a business rule as well.
- * 
- * @param {string} empId 
- * @param {string} shiftId 
- * @returns {string} A message indicating the problem of the word "Ok"
+ * Manual insertion sort (no Array.sort callback).
+ * @param {Array<object>} shifts
+ * @returns {Array<object>}
  */
-async function assignShift(empId, shiftId) {
-    // check that empId exists
-    let employee = await persistence.findEmployee(empId)
-    if (!employee) {
-        return "Employee does not exist"
+function sortShifts(shifts) {
+  const out = [];
+  for (let i = 0; i < shifts.length; i++) {
+    const item = shifts[i];
+    let placed = false;
+
+    for (let j = 0; j < out.length; j++) {
+      if (compareShift(item, out[j]) < 0) {
+        out.splice(j, 0, item);
+        placed = true;
+        break;
+      }
     }
-    // check that shiftId exists
-    let shift = await persistence.findShift(shiftId)
-    if (!shift) {
-        return "Shift does not exist"
-    }
-    // check that empId,shiftId doesn't exist already
-    let assignment = await persistence.findAssignment(empId, shiftId)
-    if (assignment) {
-        return "Employee already assigned to shift"
-    }
-
-
-    // make sure that the new assignment will not violate the rule on the
-    // number of hours per day.. this should be a separate function.
-    let maxHours = await persistence.getDailyMaxHours()
-    let currentShifts = await persistence.getEmployeeShiftsOnDate(empId, shift.date)
-    let newShiftLength = computeShiftDuration(shift.startTime, shift.endTime)
-    let scheduledHours = 0
-    for (let s of currentShifts) {
-        scheduledHours += computeShiftDuration(s.startTime, s.endTime)
-    }
-    let newAllocation = newShiftLength + scheduledHours
-    console.log(`employee has ${scheduledHours} hours already, with new shift this will be ${newAllocation}`)
-    if (newAllocation > maxHours) {
-        return "Hour Violation"
-    }
-
-    // add empId,shiftId into the bridge
-    await persistence.addAssignment(empId, shiftId)
-    
-    return "Ok"
+    if (!placed) out.push(item);
+  }
+  return out;
 }
 
 /**
- * Computes the duration of a shift in hours.  From ChatGPT!
- *
- * @param {string} startTime Time in HH:MM (24-hour format)
- * @param {string} endTime   Time in HH:MM (24-hour format)
- * @returns {number} Length of the shift in hours
+ * Build employee details model.
+ * @param {import("mongodb").Db} db
+ * @param {string} employeeId
+ * @returns {Promise<{employee: object|null, shifts: Array<object>}>}
  */
-function computeShiftDuration(startTime, endTime) {
-  const [startHour, startMinute] = startTime.split(":").map(Number);
-  const [endHour, endMinute] = endTime.split(":").map(Number);
+export async function buildEmployeeDetails(db, employeeId) {
+  const employee = await getEmployeeByEmployeeId(db, employeeId);
+  if (!employee) return { employee: null, shifts: [] };
 
-  const startTotalMinutes = startHour * 60 + startMinute;
-  const endTotalMinutes = endHour * 60 + endMinute;
+  const assignments = await getAssignmentsForEmployee(db, employeeId);
 
-  return (endTotalMinutes - startTotalMinutes) / 60;
+  const shifts = [];
+  for (let i = 0; i < assignments.length; i++) {
+    const a = assignments[i];
+    const shift = await getShiftByShiftId(db, a.shiftId);
+    if (shift) {
+      shift.isMorning = timeToMinutes(shift.startTime) < 12 * 60;
+      shifts.push(shift);
+    }
+  }
+
+  return { employee, shifts: sortShifts(shifts) };
 }
 
+/**
+ * Validate edit employee input.
+ * @param {string} name
+ * @param {string} phone
+ * @returns {{ok: boolean, message: string, name: string, phone: string}}
+ */
+export function validateEmployeeEdit(name, phone) {
+  const n = (name || "").trim();
+  const p = (phone || "").trim();
 
-module.exports = {
-    getAllEmployees, assignShift, addEmployeeRecord, getEmployeeShifts
+  if (n.length === 0) return { ok: false, message: "Name must be non-empty.", name: n, phone: p };
+  if (!/^\d{4}-\d{4}$/.test(p)) return { ok: false, message: "Phone must be in the format 0000-0000.", name: n, phone: p };
+
+  return { ok: true, message: "", name: n, phone: p };
 }
