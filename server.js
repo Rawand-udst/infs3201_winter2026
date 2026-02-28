@@ -1,117 +1,106 @@
-import express from "express";
-import { openDb, getAllEmployees, getEmployeeByEmployeeId, updateEmployee } from "./persistence.js";
-import { buildEmployeeDetails, validateEmployeeEdit } from "./business.js";
+const express = require('express')
+const business = require('./business.js')
+const bodyParser = require('body-parser')
 
-const app = express();
-app.use(express.urlencoded({ extended: true }));
+app = express()
+let urlencodedParser = bodyParser.urlencoded({extended: false})
+app.use(urlencodedParser)
 
-const PORT = 8000;
+app.get('/', async (req,res) => {
+    let result = ""
+    let employees = await business.allEmployees()
 
-function getMongoUri() {
-  const uri = process.env.MONGO_URI;
-  if (!uri || uri.trim().length === 0) throw new Error("MONGO_URI missing.");
-  return uri.trim();
-}
+    result += "<h1>Main Page</h1>"
+    result += "<h3>Employees</h3>"
+    result += "<ul>"
+    for (e of employees) {
+        result += `<li><a href='/employee-details?employeeId=${e.employeeId}'>${e.name}</a></li>`
+    }
+    result += "</ul>"
+    res.send(result)
+})
 
-const { db } = await openDb(getMongoUri());
+app.get('/employee-details', async (req, res) => {
+    let employeeId = req.query.employeeId
+    let model = await business.employeePageModel(employeeId)
 
-function esc(s) {
-  const str = String(s ?? "");
-  return str
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
+    if (!model.employee) {
+        res.send("No employee found<br><br><a href='/'>Back</a>")
+        return
+    }
 
-function page(title, body) {
-  return `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8" />
-<title>${esc(title)}</title>
-<style>
-body { font-family: Arial, sans-serif; padding: 16px; }
-table { border-collapse: collapse; }
-th, td { border: 1px solid #111; padding: 6px 10px; }
-.morning { background: yellow; }
-</style>
-</head>
-<body>
-${body}
-</body>
-</html>`;
-}
+    let html = `
+    <style>
+        table { border-collapse: collapse; }
+        th, td { border: 1px solid black; padding: 6px; }
+        .morning { background: yellow; }
+    </style>
+    `
+    html += "<h1>Employee Details</h1>"
+    html += `Employee ID: ${model.employee.employeeId}<br>`
+    html += `Name: ${model.employee.name}<br>`
+    html += `Phone: ${model.employee.phone}<br><br>`
 
-app.get("/", async (req, res) => {
-  const employees = await getAllEmployees(db);
-  let html = "<h1>Employees</h1><ul>";
-  for (let i = 0; i < employees.length; i++) {
-    const e = employees[i];
-    html += `<li><a href="/employee/${esc(e.employeeId)}">${esc(e.name)}</a></li>`;
-  }
-  html += "</ul>";
-  res.send(page("Employees", html));
-});
+    html += `<a href='/edit-employee?employeeId=${model.employee.employeeId}'>Edit Details</a>`
+    html += "<br><br>"
 
-app.get("/employee/:employeeId", async (req, res) => {
-  const employeeId = req.params.employeeId;
-  const model = await buildEmployeeDetails(db, employeeId);
+    html += "<h2>Shifts</h2>"
+    html += "<table>"
+    html += "<tr><th>Date</th><th>Start</th><th>End</th></tr>"
 
-  if (!model.employee) {
-    res.status(404).send(page("Not Found", "<h1>Employee not found</h1><p><a href='/'>Back</a></p>"));
-    return;
-  }
+    for (s of model.shifts) {
+        let cls = ""
+        if (s.isMorning) cls = "morning"
+        html += `<tr><td>${s.date}</td><td class='${cls}'>${s.startTime}</td><td>${s.endTime}</td></tr>`
+    }
 
-  let html = `<h1>${esc(model.employee.name)}</h1>`;
-  html += `<p><b>Phone:</b> ${esc(model.employee.phone)}</p>`;
-  html += `<p><a href="/employee/${esc(employeeId)}/edit">Edit Details</a> | <a href="/">Back</a></p>`;
+    html += "</table>"
+    html += "<br><a href='/'>Back</a>"
+    res.send(html)
+})
 
-  html += "<h2>Shifts</h2><table><tr><th>Date</th><th>Start</th><th>End</th></tr>";
-  for (let i = 0; i < model.shifts.length; i++) {
-    const s = model.shifts[i];
-    html += `<tr>
-      <td>${esc(s.date)}</td>
-      <td class="${s.isMorning ? "morning" : ""}">${esc(s.startTime)}</td>
-      <td>${esc(s.endTime)}</td>
-    </tr>`;
-  }
-  html += "</table>";
+app.get('/edit-employee', async (req, res) => {
+    let employeeId = req.query.employeeId
+    let emp = await business.employeeDetails(employeeId)
 
-  res.send(page("Employee Details", html));
-});
+    if (!emp) {
+        res.send("No employee found<br><br><a href='/'>Back</a>")
+        return
+    }
 
-app.get("/employee/:employeeId/edit", async (req, res) => {
-  const employeeId = req.params.employeeId;
-  const e = await getEmployeeByEmployeeId(db, employeeId);
+    let html = "<h1>Edit Employee</h1>"
+    html += "<form method='post'>"
+    html += `Employee ID: ${emp.employeeId}<br><br>`
+    html += `Name: <input name='name' value='${emp.name}'><br><br>`
+    html += `Phone: <input name='phone' value='${emp.phone}'><br><br>`
+    html += "<input type='submit' value='Save'>"
+    html += "</form>"
+    html += "<br><a href='/'>Back</a>"
+    res.send(html)
+})
 
-  if (!e) {
-    res.status(404).send(page("Not Found", "<h1>Employee not found</h1><p><a href='/'>Back</a></p>"));
-    return;
-  }
+app.post('/edit-employee', async (req, res) => {
+    let employeeId = req.query.employeeId
+    let name = req.body.name
+    let phone = req.body.phone
 
-  let html = "<h1>Edit Employee</h1>";
-  html += `<form method="POST" action="/employee/${esc(employeeId)}/edit">`;
-  html += `Name: <input name="name" value="${esc(e.name)}" /><br><br>`;
-  html += `Phone: <input name="phone" value="${esc(e.phone)}" /><br><br>`;
-  html += `<button type="submit">Save</button> <a href="/employee/${esc(employeeId)}">Cancel</a>`;
-  html += `</form>`;
+    let check = business.validateEmployeeEdit(name, phone)
+    if (!check.ok) {
+        res.send(`Error: ${check.message}<br><br><a href='/edit-employee?employeeId=${employeeId}'>Go back</a>`)
+        return
+    }
 
-  res.send(page("Edit Employee", html));
-});
+    let ok = await business.updateEmployee(employeeId, check.name, check.phone)
 
-app.post("/employee/:employeeId/edit", async (req, res) => {
-  const employeeId = req.params.employeeId;
-  const v = validateEmployeeEdit(req.body.name, req.body.phone);
+    if (ok) {
+        // PRG style: after POST redirect to GET
+        res.redirect('/')
+    }
+    else {
+        res.send("Update failed<br><br><a href='/'>Back</a>")
+    }
+})
 
-  if (!v.ok) {
-    res.status(400).send(page("Validation Error", `<h1>Error</h1><p>${esc(v.message)}</p><p><a href="/employee/${esc(employeeId)}/edit">Go back</a></p>`));
-    return;
-  }
-
-  await updateEmployee(db, employeeId, v.name, v.phone);
-  res.redirect("/");
-});
-
-app.listen(PORT, () => console.log(`http://localhost:${PORT}`));
+app.listen(8000, () => {
+    console.log("Application started http://localhost:8000")
+})
