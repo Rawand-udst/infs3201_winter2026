@@ -1,70 +1,67 @@
-import { MongoClient } from "mongodb";
+const { MongoClient } = require("mongodb");
+
+let client = undefined;
 
 const DB_NAME = "infs3201_winter2026";
 
-/**
- * Open a MongoDB database connection.
- * @param {string} mongoUri
- * @returns {Promise<{db: import("mongodb").Db, client: MongoClient}>}
- */
-export async function openDb(mongoUri) {
-  const client = new MongoClient(mongoUri);
-  await client.connect();
-  const db = client.db(DB_NAME);
-  return { db, client };
+async function connectDatabase() {
+  if (!client) {
+    client = new MongoClient(
+      "mongodb+srv://Rawand_60304948:12class34@cluster0.muybabo.mongodb.net/"
+    );
+    await client.connect();
+  }
 }
 
-/**
- * Get all employees.
- * @param {import("mongodb").Db} db
- * @returns {Promise<Array<object>>}
- */
-export async function getAllEmployees(db) {
-  return await db.collection("employees").find({}).toArray();
+async function getAllEmployees() {
+  await connectDatabase();
+  let db = client.db(DB_NAME);
+  let employees = db.collection("employees");
+  let cursor = await employees.find({});
+  let data = await cursor.toArray();
+  return data;
 }
 
-/**
- * Get one employee by employeeId.
- * @param {import("mongodb").Db} db
- * @param {string} employeeId
- * @returns {Promise<object|null>}
- */
-export async function getEmployeeByEmployeeId(db, employeeId) {
-  return await db.collection("employees").findOne({ employeeId: employeeId });
+async function getEmployeeDetails(employeeId) {
+  await connectDatabase();
+  let db = client.db(DB_NAME);
+  let employees = db.collection("employees");
+  let result = await employees.findOne({ employeeId: employeeId });
+  return result;
 }
 
-/**
- * Update employee.
- * @param {import("mongodb").Db} db
- * @param {string} employeeId
- * @param {string} name
- * @param {string} phone
- * @returns {Promise<boolean>}
- */
-export async function updateEmployee(db, employeeId, name, phone) {
-  const res = await db.collection("employees").updateOne(
+async function getAssignmentsForEmployee(employeeId) {
+  await connectDatabase();
+  let db = client.db(DB_NAME);
+  let assignments = db.collection("assignments");
+  let cursor = await assignments.find({ employeeId: employeeId });
+  let data = await cursor.toArray();
+  return data;
+}
+
+async function getShiftDetails(shiftId) {
+  await connectDatabase();
+  let db = client.db(DB_NAME);
+  let shifts = db.collection("shifts");
+  let result = await shifts.findOne({ shiftId: shiftId });
+  return result;
+}
+
+async function updateEmployee(employeeId, name, phone) {
+  await connectDatabase();
+  let db = client.db(DB_NAME);
+  let employees = db.collection("employees");
+  let result = await employees.updateOne(
     { employeeId: employeeId },
     { $set: { name: name, phone: phone } }
   );
-  return res.matchedCount === 1;
+  return result.modifiedCount > 0;
 }
 
-/**
- * Get assignments for employeeId.
- * @param {import("mongodb").Db} db
- * @param {string} employeeId
- * @returns {Promise<Array<object>>}
- */
-export async function getAssignmentsForEmployee(db, employeeId) {
-  return await db.collection("assignments").find({ employeeId: employeeId }).toArray();
-}
-
-/**
- * Get shift by shiftId.
- * @param {import("mongodb").Db} db
- * @param {string} shiftId
- * @returns {Promise<object|null>}
- */
-export async function getShiftByShiftId(db, shiftId) {
-  return await db.collection("shifts").findOne({ shiftId: shiftId });
-}
+module.exports = {
+  getAllEmployees,
+  getEmployeeDetails,
+  getAssignmentsForEmployee,
+  getShiftDetails,
+  updateEmployee
+};
