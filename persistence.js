@@ -7,7 +7,7 @@ const DB_NAME = "infs3201_winter2026";
 async function connectDatabase() {
   if (!client) {
     client = new MongoClient(
-      "mongodb+srv://Rawand_60304948:12class34@cluster0.muybabo.mongodb.net/"
+      "mongodb+srv://Rawand_60304948:12class34@cluster0.muybabo.mongodb.net/?appName=Cluster0"
     );
     await client.connect();
   }
