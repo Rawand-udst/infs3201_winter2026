@@ -99,7 +99,27 @@ async function employeePageModel(employeeId) {
   return { employee: emp, shifts: shifts };
 }
 
+/**
+ * Server-side validation for edit form.
+ * @param {string} name
+ * @param {string} phone
+ * @returns {{ok:boolean, message:string, name:string, phone:string}}
+ */
+function validateEmployeeEdit(name, phone) {
+  let n = (name || "").trim();
+  let p = (phone || "").trim();
 
+  if (n.length === 0) {
+    return { ok: false, message: "Name must be non-empty.", name: n, phone: p };
+  }
+
+  let re = /^\d{4}-\d{4}$/;
+  if (!re.test(p)) {
+    return { ok: false, message: "Phone must be in the format 0000-0000.", name: n, phone: p };
+  }
+
+  return { ok: true, message: "", name: n, phone: p };
+}
 
 /**
  * Update employee name + phone (after validation).
