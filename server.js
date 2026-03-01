@@ -1,106 +1,92 @@
 const express = require('express')
-const business = require('./business.js')
-const bodyParser = require('body-parser')
+const { engine } = require('express-handlebars')
+const business = require('./business')
 
-app = express()
+const app = express()
+
+// Handlebars setup as view engine
+app.engine('handlebars', engine({ defaultLayout: false }))
+app.set('view engine', 'handlebars')
+app.set('views', './views')
+
+// Middleware to parse URL-encoded bodies
 let urlencodedParser = bodyParser.urlencoded({extended: false})
 app.use(urlencodedParser)
 
+// Serve static files (CSS)
+app.use(express.static('public'))
+
+/**
+ * GET / - landing page with list of employees
+ * @param {Object} req - request object
+ * @param {Object} res - response object
+ * @returns {Promise<void>} - renders landing page with employee list
+ */
 app.get('/', async (req,res) => {
-    let result = ""
-    let employees = await business.allEmployees()
-
-    result += "<h1>Main Page</h1>"
-    result += "<h3>Employees</h3>"
-    result += "<ul>"
-    for (e of employees) {
-        result += `<li><a href='/employee-details?employeeId=${e.employeeId}'>${e.name}</a></li>`
-    }
-    result += "</ul>"
-    res.send(result)
+     let employees = await business.allEmployees()
+    res.render('landing', { employees: employees })
 })
 
-app.get('/employee-details', async (req, res) => {
-    let employeeId = req.query.employeeId
-    let model = await business.employeePageModel(employeeId)
-
-    if (!model.employee) {
-        res.send("No employee found<br><br><a href='/'>Back</a>")
+/**
+ * GET /employee/:employeeId - employee details page
+ * @param {Object} req - request object with employeeId parameter
+ * @param {Object} res - response object
+ * @returns {Promise<void>} - renders employee details page with employee info and schedule
+ */
+app.get('/employee/:employeeId', async (req, res) => {
+    let employeeId = req.params.employeeId;
+    let details = await business.employeeDetails(employeeId);
+    if (!details) {
+        res.send('Employee not found')
         return
     }
-
-    let html = `
-    <style>
-        table { border-collapse: collapse; }
-        th, td { border: 1px solid black; padding: 6px; }
-        .morning { background: yellow; }
-    </style>
-    `
-    html += "<h1>Employee Details</h1>"
-    html += `Employee ID: ${model.employee.employeeId}<br>`
-    html += `Name: ${model.employee.name}<br>`
-    html += `Phone: ${model.employee.phone}<br><br>`
-
-    html += `<a href='/edit-employee?employeeId=${model.employee.employeeId}'>Edit Details</a>`
-    html += "<br><br>"
-
-    html += "<h2>Shifts</h2>"
-    html += "<table>"
-    html += "<tr><th>Date</th><th>Start</th><th>End</th></tr>"
-
-    for (s of model.shifts) {
-        let cls = ""
-        if (s.isMorning) cls = "morning"
-        html += `<tr><td>${s.date}</td><td class='${cls}'>${s.startTime}</td><td>${s.endTime}</td></tr>`
+    let shift = await business.getEmployeeSchedule(employeeId);
+    for (let s of shift) {
+        s.morningStart = business.isMorningTime(s.startTime);
+        s.morningEnd = business.isMorningTime(s.endTime);
     }
-
-    html += "</table>"
-    html += "<br><a href='/'>Back</a>"
-    res.send(html)
+    res.render('employee', { 
+        employee: details, 
+        shifts: shift 
+    })
 })
 
-app.get('/edit-employee', async (req, res) => {
-    let employeeId = req.query.employeeId
-    let emp = await business.employeeDetails(employeeId)
-
-    if (!emp) {
-        res.send("No employee found<br><br><a href='/'>Back</a>")
+/**
+ * GET /add - page to add a new employee
+ * @param {Object} req - request object
+ * @param {Object} res - response object
+ * @return {Promise<void>} - renders add employee page
+ */
+app.get('/edit/:id', async function (req, res) {
+    let employeeId = req.params.id;
+    let details = await business.employeeDetails(employeeId);
+    if (!details) {
+        res.send('Employee not found')
         return
     }
-
-    let html = "<h1>Edit Employee</h1>"
-    html += "<form method='post'>"
-    html += `Employee ID: ${emp.employeeId}<br><br>`
-    html += `Name: <input name='name' value='${emp.name}'><br><br>`
-    html += `Phone: <input name='phone' value='${emp.phone}'><br><br>`
-    html += "<input type='submit' value='Save'>"
-    html += "</form>"
-    html += "<br><a href='/'>Back</a>"
-    res.send(html)
+    res.render('edit', { employee: details })
 })
 
-app.post('/edit-employee', async (req, res) => {
-    let employeeId = req.query.employeeId
-    let name = req.body.name
-    let phone = req.body.phone
-
-    let check = business.validateEmployeeEdit(name, phone)
-    if (!check.ok) {
-        res.send(`Error: ${check.message}<br><br><a href='/edit-employee?employeeId=${employeeId}'>Go back</a>`)
+/**
+ * POST /edit/:id - handle form submission to edit employee details
+ * @param {Object} req - request object with employeeId parameter and form data (name, phone)
+ * @param {Object} res - response object
+ * @returns {Promise<void>} - validates input, updates employee, and redirects to employee details page
+ */
+app.post('/edit/:id', async function (req, res) {
+    let employeeId = req.params.id;
+    let name = req.body.name;
+    let phone = req.body.phone;
+    let err = await business.validateEmployeeEdit(employeeId, name, phone);
+    if (err.length > 0) {
+        res.send(err)
         return
     }
-
-    let ok = await business.updateEmployee(employeeId, check.name, check.phone)
-
-    if (ok) {
-        // PRG style: after POST redirect to GET
-        res.redirect('/')
-    }
-    else {
-        res.send("Update failed<br><br><a href='/'>Back</a>")
-    }
+    //PRG pattern - redirect after POST to avoid resubmission on refresh
+    res.redirect
 })
 
-app.listen(8000, () => {
+
+app.listen(8000, function () {
     console.log("Application started http://localhost:8000")
 })
