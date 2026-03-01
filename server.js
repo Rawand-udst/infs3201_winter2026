@@ -45,7 +45,7 @@ app.get('/employee/:employeeId', async (req, res) => {
         shift[i].isMorningStart = business.isMorningTime(shift[i].startTime)
         shift[i].isMorningEnd = business.isMorningTime(shift[i].endTime)
     }
-    res.render('employee', { 
+    res.render('employeeDetails', { 
         employee: details, 
         shifts: shift 
     })
@@ -64,7 +64,7 @@ app.get('/edit/:id', async function (req, res) {
         res.send('Employee not found')
         return
     }
-    res.render('edit', { employee: details })
+    res.render('editEmployee', { employee: details })
 })
 
 /**
@@ -77,7 +77,7 @@ app.post('/edit/:id', async function (req, res) {
     let employeeId = req.params.id;
     let name = req.body.name;
     let phone = req.body.phone;
-    let err = await business.validateEmployeeEdit(employeeId, name, phone);
+    let err = await business.updateEmployee(employeeId, name, phone);
     if (err.length > 0) {
         res.send(err)
         return
