@@ -1,37 +1,107 @@
 const persistence = require("./persistence");
 
 /**
- * Return all employees for landing page.
+ * Return all employees from the database for the landing page. Each employee object should have employeeId, name, and phone properties.
+ * @returns {Promise<Array>} - array of employee objects
  */
 async function allEmployees() {
-  return await persistence.getAllEmployees();
+  return await persistence.loadAllEmployees();
 }
+
+/**
+ * Checks if a value is blank (null, undefined, or empty string).
+ * @param {string} value - the value to check
+ * @returns {boolean} - true if the value is blank, false otherwise
+ */
+function isBlank(value) {
+    return value === null || value === undefined || value.trim().length === 0
+}  
+
+/**
+ * Gets the next employee ID in the format "E###" based on the existing employee IDs.
+ * @param {Array<Object>} employees - array of employee objects
+ * @returns {string} - the next employee ID in the format "E###"
+ */
+function getNextEmployeeId(employees) {
+    let maxId = 0;
+    for (let emp of employees) {
+        let idNum = Number(emp.employeeId.substring(1));
+        if (!Number.isNaN(idNum) && idNum > maxId) {
+            maxId = idNum;
+        }
+    }
+    return "E" + (maxId + 1).toString().padStart(3, "0")
+}
+
+/**
+ * Validates the input for adding a new employee and adds the employee to the database if valid.
+ * @param {string} name - the name of the employee  
+ * @param {string} phone - the phone number of the employee
+ * @returns {string} - success message or error message
+ */
+async function addEmployee(name, phone) {
+  if (isBlank(name)) {
+    return 'Invalid name. Employee not added.';
+  }
+  name = name.trim();
+
+  if (name.length > 20) {
+      return 'Name too long (max 20 characters)'
+  }
+
+  if (isBlank(phone)) {
+    return 'Invalid phone. Employee not added.';
+  }
+  phone = phone.trim();
+  
+  let employees = await persistence.loadEmployees();
+  let newEmployee = getNextEmployeeId(employees);
+  await persistence.addEmployee({ 
+    employeeId: newEmployee, 
+    name: name, 
+    phone: phone 
+  });
+
+  return 'Employee added...'
+}
+
 
 /**
  * Return one employee object (or null) for details/edit pages.
  * @param {string} employeeId
+ * @returns {Promise<Object|null>} - employee object or null if not found
  */
 async function employeeDetails(employeeId) {
-  return await persistence.getEmployeeDetails(employeeId);
+  return await persistence.findEmployee(employeeId);
 }
 
 /**
- * Convert "HH:MM" to minutes.
- * @param {string} hhmm
- * @returns {number}
+ * Validates the phone number format (should be "0000-0000").
+ * @param {string} phone - the phone number to validate
+ * @returns {boolean} - true if phone is in valid format, false otherwise
  */
-function timeToMinutes(hhmm) {
-  let parts = (hhmm || "").split(":");
-  let hh = Number(parts[0]);
-  let mm = Number(parts[1]);
-  return hh * 60 + mm;
+function validPhoneFormat(phone) {
+  if (phone.length !== 9) {
+        return false
+  }
+  if (phone[4] !== '-') {
+        return false
+  }
+  for (let i = 0; i < phone.length; i++) {
+        if (i === 4) continue
+        let c = phone[i]
+        if (code < 48 || code > 57) {
+            return false
+        }
+  }
+  return true
 }
 
 /**
  * Compare shifts by date then startTime.
- * @param {object} a
- * @param {object} b
- * @returns {number}
+ * @param {object} a - first shift object with date and startTime properties
+ * @param {object} b - second shift object with date and startTime properties
+ * @returns {number} -1 if a < b, 1 if a > b, 0 if equal
  */
 function compareShift(a, b) {
   if (a.date < b.date) return -1;
@@ -45,96 +115,75 @@ function compareShift(a, b) {
 }
 
 /**
- * Manual insertion sort (no Array.sort()).
- * @param {Array<object>} shifts
- * @returns {Array<object>}
+ * Sort shifts by date then startTime using bubble sort 
+ * @param {Array<object>} shifts - array of shift objects with date and startTime properties
+ * @returns {void} - sorts the shifts array in place
  */
 function sortShifts(shifts) {
-  let out = [];
-  for (let i = 0; i < shifts.length; i++) {
-    let item = shifts[i];
-    let placed = false;
-
-    for (let j = 0; j < out.length; j++) {
-      if (compareShift(item, out[j]) < 0) {
-        out.splice(j, 0, item);
-        placed = true;
-        break;
+  let num = shifts.length
+  for (let i = 0; i < num -1; i++) {
+    let swap = false
+    for (let j = 0; j < num - i - 1; j++) {
+      if (compareShift(shifts[j], shifts[j+1]) > 0) {
+        let temp = shifts[j]
+        shifts[j] = shifts[j+1]
+        shifts[j+1] = temp
+        swap = true
       }
     }
-
-    if (!placed) out.push(item);
+    if (!swap) break;
   }
-  return out;
+  return shifts;
 }
 
 /**
- * Build employee page model:
- * - employee object
- * - shifts sorted by date/time
- * - startTime < 12:00 marked with isMorning=true
- * @param {string} employeeId
- * @returns {Promise<{employee: object|null, shifts: Array<object>}>}
+ * Returns the schedule (shifts) for a given employee, sorted by date and start time.
+ * @param {string} employeeId - the ID of the employee whose schedule is to be retrieved
+ * @returns {Promise<Array>} - array of shift objects sorted by date and startTime
  */
-async function employeePageModel(employeeId) {
-  let emp = await persistence.getEmployeeDetails(employeeId);
-  if (!emp) {
-    return { employee: null, shifts: [] };
-  }
-
-  let assignments = await persistence.getAssignmentsForEmployee(employeeId);
-
-  let shifts = [];
-  for (let i = 0; i < assignments.length; i++) {
-    let a = assignments[i];
-    let s = await persistence.getShiftDetails(a.shiftId);
-    if (s) {
-      s.isMorning = timeToMinutes(s.startTime) < 12 * 60;
-      shifts.push(s);
-    }
-  }
-
-  shifts = sortShifts(shifts);
-
-  return { employee: emp, shifts: shifts };
+async function getEmployeeSchedule(employeeId) {
+  let shifts = await persistence.findShiftsByEmployee(employeeId);
+  return sortShifts(shifts);
 }
 
 /**
- * Server-side validation for edit form.
- * @param {string} name
- * @param {string} phone
- * @returns {{ok:boolean, message:string, name:string, phone:string}}
+ * Checks if a given time is in the morning (before 12:00).
+ * @param {string} time - time in HH:MM format
+ * @returns {boolean} - true if the time is in the morning (before 12:00), false otherwise
  */
-function validateEmployeeEdit(name, phone) {
-  let n = (name || "").trim();
-  let p = (phone || "").trim();
-
-  if (n.length === 0) {
-    return { ok: false, message: "Name must be non-empty.", name: n, phone: p };
-  }
-
-  let re = /^\d{4}-\d{4}$/;
-  if (!re.test(p)) {
-    return { ok: false, message: "Phone must be in the format 0000-0000.", name: n, phone: p };
-  }
-
-  return { ok: true, message: "", name: n, phone: p };
+function isMorningTime(time) {
+  let hours = Number(time.substring(0, 2));
+  return hours < 12;
 }
 
 /**
- * Update employee name + phone (after validation).
- * @param {string} employeeId
- * @param {string} name
- * @param {string} phone
+ * Update employee details in the database after validating the input. Returns a success message or an error message if validation fails.
+ * @param {string} employeeId - the ID of the employee to update
+ * @param {string} name -  the new name of the employee
+ * @param {string} phone - the new phone number of the employee
+ * @return {Promise<string>} - success message or error message
  */
 async function updateEmployee(employeeId, name, phone) {
-  return await persistence.updateEmployee(employeeId, name, phone);
+  if (isBlank(name)) {
+        return 'Name cannot be empty'
+  }
+  name = name.trim();
+  if(isBlank(phone)) {
+        return 'Phone cannot be empty'
+  }
+  phone = phone.trim();
+  if (!validPhoneFormat(phone)) {
+        return 'Phone must be in the format 0000-0000'
+  }
+  await persistence.updateEmployee(employeeId, name, phone);
+  return 'Employee updated...'
 }
 
 module.exports = {
-  allEmployees,
-  employeeDetails,
-  employeePageModel,
-  validateEmployeeEdit,
-  updateEmployee
-};
+    allEmployees,
+    addEmployee,
+    employeeDetails,
+    updateEmployee,
+    getEmployeeSchedule,
+    isMorningTime
+}
