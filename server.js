@@ -10,8 +10,8 @@ app.set('view engine', 'handlebars')
 app.set('views', './views')
 
 // Middleware to parse URL-encoded bodies
-let urlencodedParser = bodyParser.urlencoded({extended: false})
-app.use(urlencodedParser)
+app.use(express.urlencoded({ extended: false }))
+
 
 // Serve static files (CSS)
 app.use(express.static('public'))
