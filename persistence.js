@@ -2,6 +2,9 @@ const { MongoClient } = require('mongodb')
 
 let client = undefined;
 
+const dns = require('dns');
+dns.setServers(['8.8.8.8','8.8.4.4']);
+
 /**
  * Connects to the MongoDB database if not already connected.
  * Uses a connection string to connect to the MongoDB Atlas cluster.
@@ -10,7 +13,7 @@ let client = undefined;
  */
 async function connectDatabase() {
   if (!client) {
-    client = new MongoClient("mongodb+srv://Rawand_60304948:12class34@cluster0.muybabo.mongodb.net/?appName=Cluster0");
+    client = new MongoClient("mongodb+srv://Rawand_60304948:12class34@cluster0.0ztz6je.mongodb.net/");
     await client.connect();
   }
 }
