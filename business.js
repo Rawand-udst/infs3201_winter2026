@@ -54,7 +54,7 @@ async function addEmployee(name, phone) {
   }
   phone = phone.trim();
   
-  let employees = await persistence.loadEmployees();
+  let employees = await persistence.loadAllEmployees();
   let newEmployee = getNextEmployeeId(employees);
   await persistence.addEmployee({ 
     employeeId: newEmployee, 
@@ -89,8 +89,8 @@ function validPhoneFormat(phone) {
   }
   for (let i = 0; i < phone.length; i++) {
         if (i === 4) continue
-        let c = phone[i]
-        if (code < 48 || code > 57) {
+        let c =   phone.charCodeAt(i)
+        if (c < 48 || c > 57) {
             return false
         }
   }
@@ -177,6 +177,17 @@ async function updateEmployee(employeeId, name, phone) {
   }
   await persistence.updateEmployee(employeeId, name, phone);
   return 'Employee updated...'
+}
+
+/**
+ * Converts a time string in HH:MM format to minutes since midnight.
+ * @param {string} hhmm - time in HH:MM format
+ * @returns {number} - time in minutes since midnight
+ */
+function timeToMinutes(hhmm) {
+  let hh = Number(hhmm.substring(0, 2))
+  let mm = Number(hhmm.substring(3, 5))
+  return hh * 60 + mm
 }
 
 module.exports = {
