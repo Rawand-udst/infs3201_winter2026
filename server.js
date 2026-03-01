@@ -41,9 +41,9 @@ app.get('/employee/:employeeId', async (req, res) => {
         return
     }
     let shift = await business.getEmployeeSchedule(employeeId);
-    for (let s of shift) {
-        s.morningStart = business.isMorningTime(s.startTime);
-        s.morningEnd = business.isMorningTime(s.endTime);
+    for (let i = 0; i < shift.length; i++) {
+        shift[i].isMorningStart = business.isMorningTime(shift[i].startTime)
+        shift[i].isMorningEnd = business.isMorningTime(shift[i].endTime)
     }
     res.render('employee', { 
         employee: details, 
@@ -83,7 +83,7 @@ app.post('/edit/:id', async function (req, res) {
         return
     }
     //PRG pattern - redirect after POST to avoid resubmission on refresh
-    res.redirect
+    res.redirect('/')
 })
 
 
