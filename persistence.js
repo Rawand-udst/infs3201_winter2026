@@ -1,105 +1,114 @@
-const { MongoClient } = require('mongodb')
+const mongodb = require('mongodb')
+const { MongoClient, ObjectId } = mongodb
 
-let client = undefined;
+let client = undefined
 
-const dns = require('dns');
-dns.setServers(['8.8.8.8','8.8.4.4']);
+const dns = require('dns')
+dns.setServers(['8.8.8.8', '8.8.4.4'])
 
 /**
- * Connects to the MongoDB database if not already connected.
- * Uses a connection string to connect to the MongoDB Atlas cluster.
- * The client is stored in a variable to reuse the connection for subsequent calls.
- * @returns {Promise<void>} - resolves when the connection is established
+ * Connects to MongoDB if not already connected.
+ * @returns {Promise<void>}
  */
 async function connectDatabase() {
-  if (!client) {
-    client = new MongoClient("mongodb+srv://Rawand_60304948:12class34@cluster0.0ztz6je.mongodb.net/");
-    await client.connect();
-  }
+    if (!client) {
+        client = new MongoClient("mongodb+srv://Rawand_60304948:12class34@cluster0.0ztz6je.mongodb.net/")
+        await client.connect()
+    }
 }
 
 /**
- * Returns the database instance for the application to perform operations on.
- * @returns {Object} - the database instance
+ * Returns the application database.
+ * @returns {import('mongodb').Db}
  */
 function getDb() {
-    return client.db('infs3201_winter2026');
+    return client.db('infs3201_winter2026')
 }
 
 /**
- * Loads all employees from the database.
- * @returns {Promise<Array>} - array of employee objects
+ * Loads all employees.
+ * @returns {Promise<Array>}
  */
 async function loadAllEmployees() {
-  await connectDatabase();
-  let db = getDb();
-  let employees = db.collection("employees");
-  let data = await employees.find().toArray()
-  return data;
+    await connectDatabase()
+    let db = getDb()
+    return await db.collection('employees').find().toArray()
 }
 
 /**
- * Finds an employee by their ID.
- * @param {string} employeeId 
- * @returns {Promise<Object|null>} - employee object or null if not found
+ * Finds one employee by Mongo ObjectId.
+ * @param {string} id
+ * @returns {Promise<Object|null>}
  */
-async function findEmployee(employeeId) {
-  await connectDatabase();
-  let db = getDb();
-  let employees = db.collection("employees");
-  let result = await employees.findOne({ employeeId: employeeId });
-  return result;
+async function findEmployeeById(id) {
+    await connectDatabase()
+    let db = getDb()
+
+    if (!ObjectId.isValid(id)) {
+        return null
+    }
+
+    return await db.collection('employees').findOne({ _id: new ObjectId(id) })
 }
 
 /**
- * Adds an employee to the database.
- * @param {Object} employee - the employee object to be added
- * @returns {Promise<void>} - resolves when the employee is added
+ * Adds an employee.
+ * @param {Object} employee
+ * @returns {Promise<void>}
  */
 async function addEmployee(employee) {
-  await connectDatabase();
-  let db = getDb();
-  let employees = db.collection("employees");
-  await employees.insertOne(employee)
+    await connectDatabase()
+    let db = getDb()
+    await db.collection('employees').insertOne(employee)
 }
 
 /**
- * Updates an employee in the database.
- * @param {string} employeeId - the ID of the employee to be updated
- * @param {string} name - the new name of the employee
- * @param {string} phone - the new phone number of the employee
- * @returns {Promise<boolean>} - true if the employee was updated, false otherwise
+ * Updates employee data.
+ * @param {string} id
+ * @param {string} name
+ * @param {string} phone
+ * @param {string} photo
+ * @returns {Promise<void>}
  */
-async function updateEmployee(employeeId, name, phone) {
-  await connectDatabase();
-  let db = getDb();
-  let employees = db.collection("employees");
-  await employees.updateOne(
-    { employeeId: employeeId },
-    { $set: { name: name, phone: phone } }
-  );
+async function updateEmployee(id, name, phone, photo) {
+    await connectDatabase()
+    let db = getDb()
+
+    if (!ObjectId.isValid(id)) {
+        return
+    }
+
+    let updateData = {
+        name: name,
+        phone: phone
+    }
+
+    if (photo !== undefined && photo !== null && photo.length > 0) {
+        updateData.photo = photo
+    }
+
+    await db.collection('employees').updateOne(
+        { _id: new ObjectId(id) },
+        { $set: updateData }
+    )
 }
 
 /**
- * Finds shifts assigned to an employee by their ID.
- * Joins the "assignments" collection to find shift IDs for the employee, then retrieves shift details from the "shifts" collection.
- * @param {string} employeeId - the ID of the employee whose shifts are to be retrieved
- * @returns {Promise<Array>} - array of shift objects for the given employee
+ * Finds shifts for a given employee ObjectId.
+ * @param {string} employeeId
+ * @returns {Promise<Array>}
  */
 async function findShiftsByEmployee(employeeId) {
-  await connectDatabase();
-  let db = getDb();
-  let assignmentsCollection = db.collection("assignments");
-  let shiftsCollection = db.collection("shifts");
-  let assignments = await assignmentsCollection.find({ employeeId: employeeId }).toArray();
-  let shiftsID = [];
-  for (let assignment of assignments) {
-      shiftsID.push(assignment.shiftsID);
+    await connectDatabase()
+    let db = getDb()
+
+    if (!ObjectId.isValid(employeeId)) {
+        return []
     }
-  if (shiftsID.length === 0) {
-      return []
-  }
-  let shifts = await shiftsCollection.find({ shiftID: { $in: shiftsID } }).toArray()
+
+    let shifts = await db.collection('shifts').find({
+        employees: new ObjectId(employeeId)
+    }).toArray()
 
     let result = []
     for (let i = 0; i < shifts.length; i++) {
@@ -109,14 +118,93 @@ async function findShiftsByEmployee(employeeId) {
             endTime: shifts[i].endTime
         })
     }
-
     return result
 }
 
+/**
+ * Finds user details by username.
+ * @param {string} username
+ * @returns {Promise<Object|null>}
+ */
+async function getUserDetails(username) {
+    await connectDatabase()
+    let db = getDb()
+    return await db.collection('users').findOne({ username: username })
+}
 
 /**
- * Loads config from config.json file. Configuration is not stored in the database.
- * @returns {Promise<Object>} The configuration object.
+ * Starts a session.
+ * @param {Object} sessionData
+ * @returns {Promise<void>}
+ */
+async function startSession(sessionData) {
+    await connectDatabase()
+    let db = getDb()
+    await db.collection('sessions').insertOne(sessionData)
+}
+
+/**
+ * Gets one session by key if not expired.
+ * @param {string} sessionKey
+ * @returns {Promise<Object|null>}
+ */
+async function getSession(sessionKey) {
+    await connectDatabase()
+    let db = getDb()
+
+    let session = await db.collection('sessions').findOne({ key: sessionKey })
+    if (!session) {
+        return null
+    }
+
+    if (new Date(session.expiry) < new Date()) {
+        await db.collection('sessions').deleteOne({ key: sessionKey })
+        return null
+    }
+
+    return session
+}
+
+/**
+ * Extends session expiry.
+ * @param {string} sessionKey
+ * @param {Date} newExpiry
+ * @returns {Promise<void>}
+ */
+async function updateSessionExpiry(sessionKey, newExpiry) {
+    await connectDatabase()
+    let db = getDb()
+    await db.collection('sessions').updateOne(
+        { key: sessionKey },
+        { $set: { expiry: newExpiry } }
+    )
+}
+
+/**
+ * Deletes a session.
+ * @param {string} sessionKey
+ * @returns {Promise<void>}
+ */
+async function deleteSession(sessionKey) {
+    await connectDatabase()
+    let db = getDb()
+    await db.collection('sessions').deleteOne({ key: sessionKey })
+}
+
+/**
+ * Writes a security log entry.
+ * @param {Object} logEntry
+ * @returns {Promise<void>}
+ */
+async function logSecurityAccess(logEntry) {
+    await connectDatabase()
+    let db = getDb()
+    await db.collection('security_log').insertOne(logEntry)
+}
+
+/**
+ * Loads config from config.json.
+ * @returns {Promise<Object>}
  */
 async function loadConfig() {
     let fs = require('fs/promises')
@@ -127,8 +215,14 @@ async function loadConfig() {
 module.exports = {
     loadAllEmployees,
     loadConfig,
-    findEmployee,
+    findEmployeeById,
     addEmployee,
     updateEmployee,
-    findShiftsByEmployee
+    findShiftsByEmployee,
+    getUserDetails,
+    startSession,
+    getSession,
+    updateSessionExpiry,
+    deleteSession,
+    logSecurityAccess
 }
