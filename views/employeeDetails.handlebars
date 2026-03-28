@@ -6,8 +6,9 @@
 <body>
     <h1>Employee Details</h1>
     <p>Name: {{employee.name}}</p>
+    <img src="/images/{{employee.photo}}" width="150">
     <p>Phone: {{employee.phone}}</p>
-    <a href="/edit/{{employee.employeeId}}">Edit Details</a>
+    <a href="/edit/{{employee._id}}">Edit Details</a>
 
     <h2>Shifts</h2>
     {{#if shifts.length}}
@@ -32,5 +33,6 @@
     {{else}}
     <p>No shifts found</p>
     {{/if}}
+    <p><a href="/">Back to Employee List</a></p>
 </body>
 </html>

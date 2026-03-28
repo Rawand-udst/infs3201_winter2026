@@ -5,10 +5,14 @@
 </head>
 <body>
     <h1>List of Employees</h1>
+
+    <p>Logged in as: {{username}}</p>
+    <p><a href="/logout">Logout</a></p>
+
     <ul>
         {{#each employees}}
         <li>
-            <a href="/employee/{{this.employeeId}}">{{this.name}}</a>
+            <a href="/employee/{{this._id}}">{{this.name}}</a>
         </li>
         {{/each}}
     </ul>
