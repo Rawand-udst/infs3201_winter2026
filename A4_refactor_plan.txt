@@ -1,0 +1,71 @@
+Assignment 4 Refactor Plan
+
+1. Collections that will change
+- employees collection:
+  - remove employeeId
+  - keep _id, name, phone
+  - add photo filename/path field
+- shifts collection:
+  - remove shiftId
+  - add employees array containing employee ObjectIds
+- assignments collection:
+  - remove completely after employee ObjectIds are embedded into shifts
+- new users collection:
+  - username
+  - hashed password (sha256)
+- new security_log collection:
+  - timestamp, username, url, method
+- new sessions collection:
+  - key, expiry, data
+
+2. Persistence functions to modify or remove
+- loadAllEmployees:
+  - keep, but now it returns employees using Mongo _id
+- findEmployee(employeeId):
+  - change to findEmployeeById(id) using ObjectId
+- updateEmployee(employeeId, name, phone):
+  - change to updateEmployee(id, name, phone)
+- findShiftsByEmployee(employeeId):
+  - rewrite so it searches shifts where employees array contains ObjectId
+- addEmployee:
+  - keep, but do not generate employeeId anymore
+- remove all logic depending on assignments collection
+- add new persistence functions for:
+  - getUserDetails(username)
+  - startSession(sessionData)
+  - getSession(sessionKey)
+  - updateSessionExpiry(sessionKey, expiry)
+  - deleteSession(sessionKey)
+  - logSecurityAccess(entry)
+
+3. Business logic functions to modify
+- allEmployees:
+  - stays mostly the same
+- employeeDetails(employeeId):
+  - change to accept Mongo _id string
+- updateEmployee(employeeId, name, phone):
+  - update using ObjectId
+- getEmployeeSchedule(employeeId):
+  - get shifts from embedded employees array
+- addEmployee:
+  - no employeeId generation anymore
+- add new business logic:
+  - hashPassword(password)
+  - attemptLogin(username, password)
+
+4. Embedded arrays and update operations
+- Instead of inserting into assignments collection, employee ObjectIds are stored directly in shifts.employees
+- To assign an employee to a shift in future, use $addToSet on shifts collection
+- To unassign an employee, use $pull on shifts collection
+- Reading schedules becomes simpler because shifts already contain assigned employee ObjectIds
+- Care must be taken to convert string ids into ObjectId before querying
+
+5. Risks / complications
+- Existing data must be migrated carefully so no assignments are lost
+- _id values are ObjectId objects, not plain strings
+- Any route or link using employeeId must be changed to use _id
+- Sessions must expire after 5 minutes and be renewed on each request
+- All routes except /login and /logout must be protected by middleware
+- Invalid or malformed ObjectId strings could crash the app if not validated
+- Employee photo uploads need safe file handling and access control
+- Middleware is needed for both authorization checks and security access logging
