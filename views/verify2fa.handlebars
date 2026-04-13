@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Two-Factor Authentication</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <h1>Two-Factor Authentication</h1>
+
+    <p>A verification code has been sent to your email.</p>
+    <p>Please enter the 6-digit code to continue.</p>
+    <p><strong>Note:</strong> The code will expire in 3 minutes.</p>
+
+    {{#if msg}}
+        <p style="color: red;">{{msg}}</p>
+    {{/if}}
+
+    <form method="POST" action="/verify-2fa">
+        <label>Verification Code</label>
+        <br>
+        <input type="text" name="code" maxlength="6" pattern="[0-9]{6}" placeholder="000000" required>
+        <br><br>
+        <button type="submit">Verify</button>
+    </form>
+
+    <br>
+    <p><a href="/login">Back to Login</a></p>
+</body>
+</html>
