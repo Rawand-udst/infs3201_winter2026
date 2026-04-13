@@ -1,13 +1,3 @@
-# INFS3201 - Assignment 5
-## Employee Scheduling System with 2FA and Document Upload
-
-**Student:** Rawand  
-**Student ID:** 60304948  
-**Course:** INFS3201 - Web Technologies II  
-**Due Date:** April 14, 2026 @ 11:59pm
-
----
-
 ## Login Credentials
 
 | Username | Password |
@@ -15,17 +5,6 @@
 | `admin` | `admin123` |
 | `rawand` | `password123` |
 | `manager` | `manager123` |
-
----
-
-## Installation
-
-```bash
-npm install
-npm start
-```
-
-Then open: **http://localhost:8000**
 
 ---
 
@@ -91,17 +70,5 @@ Assignment5_Rawand_60304948/
 3. Try uploading non-PDF → should fail
 4. Try uploading file over 2MB → should fail
 5. Upload 5 files, try 6th → should fail
-
----
-
-## Unlocking a Locked Account
-
-In MongoDB Compass or Mongosh:
-```javascript
-db.users.updateOne(
-  { username: "admin" },
-  { $set: { isLocked: false, failedAttempts: 0 } }
-)
-```
 
 ---
